@@ -1,66 +1,95 @@
-document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', function (e) {
-        e.preventDefault();
-        const target = document.querySelector(this.getAttribute('href'));
-        if (target) {
-            target.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start'
-            });
-        }
-    });
-});
+// ===============================================================
+//  Badis Nabi — Portfolio interactions
+// ===============================================================
+(function () {
+    'use strict';
 
-const observerOptions = {
-    threshold: 0.1,
-    rootMargin: '0px 0px -50px 0px'
-};
+    const nav        = document.querySelector('nav');
+    const navToggle  = document.querySelector('.nav-toggle');
+    const navAnchors = Array.from(document.querySelectorAll('.nav-links a'));
+    const progress   = document.getElementById('scrollProgress');
+    const sections   = Array.from(document.querySelectorAll('section[id]'));
 
-const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-        if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
-        }
-    });
-}, observerOptions);
+    // ---- Mobile menu --------------------------------------------
+    function closeMenu() {
+        nav.classList.remove('open');
+        if (navToggle) navToggle.setAttribute('aria-expanded', 'false');
+    }
 
-document.querySelectorAll('.fade-in').forEach(el => {
-    observer.observe(el);
-});
-
-document.getElementById('contactForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    
-    const name = document.getElementById('name').value;
-    const email = document.getElementById('email').value;
-    const message = document.getElementById('message').value;
-    
-    const mailtoLink = `mailto:badisnabi@gmail.com?subject=Message from ${encodeURIComponent(name)}&body=${encodeURIComponent(message)}%0D%0A%0D%0AFrom: ${encodeURIComponent(email)}`;
-    
-    window.location.href = mailtoLink;
-    
-    this.reset();
-    
-    alert('Thank you for your message! Your email client should open shortly.');
-});
-
-window.addEventListener('scroll', () => {
-    const sections = document.querySelectorAll('section[id]');
-    const navLinks = document.querySelectorAll('.nav-links a');
-    
-    let current = '';
-    sections.forEach(section => {
-        const sectionTop = section.offsetTop;
-        const sectionHeight = section.clientHeight;
-        if (scrollY >= sectionTop - 200) {
-            current = section.getAttribute('id');
-        }
+    if (navToggle) {
+        navToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const open = nav.classList.toggle('open');
+            navToggle.setAttribute('aria-expanded', String(open));
+        });
+    }
+    navAnchors.forEach(a => a.addEventListener('click', closeMenu));
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+    document.addEventListener('click', e => {
+        if (nav.classList.contains('open') && !nav.contains(e.target)) closeMenu();
     });
 
-    navLinks.forEach(link => {
-        link.style.color = 'var(--text-muted)';
-        if (link.getAttribute('href').slice(1) === current) {
-            link.style.color = 'var(--text)';
+    // ---- Scroll-driven UI: nav shadow, progress bar, active link ----
+    let ticking = false;
+    function onScroll() {
+        const y    = window.scrollY;
+        const docH = document.documentElement.scrollHeight - window.innerHeight;
+
+        nav.classList.toggle('scrolled', y > 30);
+
+        if (progress) {
+            const pct = docH > 0 ? (y / docH) * 100 : 0;
+            progress.style.width = pct + '%';
         }
-    });
-});
+
+        // scroll-spy: mark the section currently in view
+        const line = y + window.innerHeight * 0.3;
+        let current = '';
+        sections.forEach(sec => { if (line >= sec.offsetTop) current = sec.id; });
+        navAnchors.forEach(a => {
+            a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+        });
+
+        ticking = false;
+    }
+    window.addEventListener('scroll', () => {
+        if (!ticking) { requestAnimationFrame(onScroll); ticking = true; }
+    }, { passive: true });
+    onScroll();
+
+    // ---- Scroll reveal ------------------------------------------
+    const io = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('visible');
+                io.unobserve(entry.target);   // reveal once, then stop watching
+            }
+        });
+    }, { threshold: 0.12, rootMargin: '0px 0px -50px 0px' });
+    document.querySelectorAll('.fade-in').forEach(el => io.observe(el));
+
+    // ---- Cursor glow (fine pointers only) -----------------------
+    if (window.matchMedia('(pointer: fine)').matches) {
+        const glow = document.createElement('div');
+        glow.className = 'cursor-glow';
+        document.body.appendChild(glow);
+
+        let tx = 0, ty = 0, cx = 0, cy = 0, raf = null;
+        function render() {
+            cx += (tx - cx) * 0.15;
+            cy += (ty - cy) * 0.15;
+            glow.style.transform = `translate(${cx}px, ${cy}px) translate(-50%, -50%)`;
+            if (Math.abs(tx - cx) > 0.5 || Math.abs(ty - cy) > 0.5) {
+                raf = requestAnimationFrame(render);
+            } else {
+                raf = null;
+            }
+        }
+        window.addEventListener('mousemove', e => {
+            tx = e.clientX; ty = e.clientY;
+            glow.style.opacity = '1';
+            if (!raf) raf = requestAnimationFrame(render);
+        });
+        document.addEventListener('mouseleave', () => { glow.style.opacity = '0'; });
+    }
+})();
